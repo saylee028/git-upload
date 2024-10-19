@@ -1,0 +1,36 @@
+version: 0.2
+
+env:
+  variables:
+    DOCKER_IMAGE_NAME: "$1"  # This will be passed from the pipeline
+    AWS_DEFAULT_REGION: "us-west-2"  # Replace with your AWS region
+    ECR_REPO_URI: "637423173374.dkr.ecr.us-west-2.amazonaws.com/python-app"  # Replace with your ECR URI
+
+phases:
+  install:
+    commands:
+      - echo "Installing necessary dependencies..."
+      - apt-get update -y && apt-get install -y git
+  pre_build:
+    commands:
+      - echo "Logging into Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI
+      - echo "Fetching latest code from CodeCommit..."
+      - git fetch --all
+      - echo "Checking out the branch..."
+      - git checkout $CODEBUILD_SOURCE_VERSION
+      - echo "This is CodeCommit Repo URL - $CODEBUILD_SOURCE_REPO_URL"
+      - echo "This is the branch name - $CODEBUILD_SOURCE_VERSION"
+      - echo "This is the commit ID - $CODEBUILD_RESOLVED_SOURCE_VERSION"
+  build:
+    commands:
+      - echo "Building Docker image..."
+      - docker build -t $DOCKER_IMAGE_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION $CODEBUILD_SRC_DIR/docker_python
+      - echo "Tagging the Docker image..."
+      - docker tag $DOCKER_IMAGE_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION $ECR_REPO_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+  post_build:
+    commands:
+      - echo "Pushing Docker image to Amazon ECR..."
+      - docker push $ECR_REPO_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "Docker image pushed successfully to ECR."
+      - echo "Build completed."
